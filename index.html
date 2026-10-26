@@ -6,7 +6,7 @@
 <title>SAP Customer Details</title>
 <script src="https://live.zwidgets.com/js-sdk/1.2/ZohoEmbededAppSDK.min.js"></script>
 <style>
-  :root { --ink:#1f2933; --muted:#6b7785; --line:#d9dee4; --bg:#f5f7f9; --brand:#1a5f7a; --brand-dark:#134a5f; --danger:#c0392b; --ok:#1e8e5a; }
+  :root { --ink:#1f2933; --muted:#6b7785; --line:#d9dee4; --bg:#f5f7f9; --brand:#1a5f7a; --brand-dark:#134a5f; --danger:#e03a3a; --ok:#1e8e5a; }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body { font-family: "Segoe UI", system-ui, Arial, sans-serif; font-size: 14px; color: var(--ink); background: #fff; }
@@ -16,11 +16,15 @@
   legend { padding: 0 0 8px; margin-bottom: 12px; width: 100%; font-weight: 600; color: var(--brand); border-bottom: 1px solid var(--line); }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; }
   .field label { display: block; margin-bottom: 4px; font-size: 12px; color: var(--muted); }
-  .req { color: var(--danger); margin-left: 2px; }
+  .req { color: var(--danger); margin-left: 2px; font-weight: 700; }
   input, select { width: 100%; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 4px; font: inherit; color: var(--ink); background: #fff; }
-  input:focus, select:focus { outline: 2px solid #9cc7d7; border-color: var(--brand); }
+  input:focus, select:focus { outline: none; border-color: var(--brand); box-shadow: 0 0 0 2px #9cc7d733; }
   select:disabled { background: var(--bg); color: var(--muted); }
-  .field.invalid input, .field.invalid select { border-color: var(--danger); background: #fff8f7; }
+  .field.mandatory input, .field.mandatory select { border-left: 3px solid var(--danger); }
+  .field.invalid input, .field.invalid select { border: 1px solid var(--danger); border-left: 3px solid var(--danger); }
+  .field.invalid input:focus, .field.invalid select:focus { box-shadow: 0 0 0 2px #e03a3a22; }
+  .err { display: none; margin-top: 3px; font-size: 11px; color: var(--danger); }
+  .field.invalid .err { display: block; }
   .banner { display: none; margin-bottom: 14px; padding: 9px 12px; border-radius: 4px; background: #fdecea; color: var(--danger); border: 1px solid #f5c6c0; }
   .banner.show { display: block; }
   .footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--line); background: var(--bg); }
@@ -54,6 +58,8 @@
   "use strict";
   var DEFAULT_STATUS = "Customer Code Creation SAP";
 
+  // req:true => mandatory (red marker + "<label> cannot be empty." warning).
+  // Change req flags here to adjust which fields are mandatory.
   var SECTIONS = [
     { title: "Contact", items: [
       { api: "First_Name", label: "First Name", req: true },
@@ -64,37 +70,39 @@
       { api: "Secondary_Phone", label: "Secondary Phone" },
       { api: "Email", label: "Email" } ] },
     { title: "Address", items: [
-      { api: "State", label: "State", type: "state", req: true },
-      { api: "City", label: "City" },
-      { api: "Zip_Code", label: "Zip Code" },
-      { api: "Flat_House_No_Building_Apartment_Name", label: "Flat / House No / Building" },
-      { api: "Street", label: "Street" },
-      { api: "Nationality", label: "Nationality" },
+      { api: "State_1", label: "State", type: "state", req: true },
+      { api: "City_1", label: "City" },
+      { api: "Zip_Code_1", label: "Zip Code" },
+      { api: "address_line_1", label: "Flat / House No / Building" },
+      { api: "address_line_2", label: "Street" },
+      { api: "Nationality", label: "Nationality", type: "nationality" },
       { api: "Secondary_Email", label: "Secondary Email" } ] },
     { title: "Profile", items: [
-      { api: "Category_Type", label: "Category Type" },
-      { api: "Designation", label: "Designation" },
-      { api: "Occupation", label: "Occupation" },
-      { api: "Gender", label: "Gender" },
-      { api: "Family_Status_Code", label: "Family Status Code" },
-      { api: "Date_of_Birth", label: "Date of Birth", type: "date" },
+      { api: "Category_Type", label: "Category Type", type: "select", options: ["Person", "Organization", "Group"] },
+      { api: "Title_And_Company", label: "Designation / Company" },
+      { api: "Occupation", label: "Occupation", type: "select", options: ["Professor", "Business", "Other", "Lawyer", "Dr.", "Service", "NA"] },
+      { api: "Gender", label: "Gender", type: "select", options: ["Male", "Female"] },
+      { api: "Family_Status_Code", label: "Family Status Code", type: "select", options: ["Widowed", "Married", "Divorced", "Single"] },
+      { api: "Date_Of_Birth", label: "Date of Birth", type: "date" },
       { api: "Distribution_Channel", label: "Distribution Channel" } ] },
     { title: "Identity", items: [
       { api: "Aadhar", label: "Aadhar" },
       { api: "PAN", label: "PAN" },
       { api: "Passport_Number", label: "Passport Number" },
-      { api: "PIO_Number", label: "PIO Number" },
-      { api: "CIO_Number", label: "CIO Number" },
-      { api: "GST_Number", label: "GST Number" } ] }
+      { api: "PIO_Number", label: "PIO Number", type: "int" },
+      { api: "CIO_Number", label: "CIO Number", type: "select", options: ["Option 1"] },
+      { api: "GST_Number", label: "GST Number", type: "int" } ] }
   ];
 
   var $ = function (id) { return document.getElementById(id); };
-  var recordId = null, targetStatus = DEFAULT_STATUS, statesCache = {};
+  var recordId = null, targetStatus = DEFAULT_STATUS, statesCache = {}, original = {};
 
+  function allItems() { var a = []; SECTIONS.forEach(function (s) { a = a.concat(s.items); }); return a; }
   function showOverlay(t, ok) { $("overlayText").textContent = t; $("overlay").className = "overlay show" + (ok ? " ok" : ""); }
   function hideOverlay() { $("overlay").className = "overlay"; }
   function showBanner(m) { $("banner").textContent = m; $("banner").className = "banner show"; $("banner").scrollIntoView({ block: "nearest" }); }
   function clearBanner() { $("banner").className = "banner"; }
+  function msg(e) { return e && e.message ? e.message : JSON.stringify(e); }
 
   function getLocations(countryName) {
     return ZOHO.CRM.FUNCTIONS.execute("getlocations", { arguments: JSON.stringify({ countryName: countryName }) })
@@ -113,13 +121,26 @@
     list.forEach(function (n) { var op = document.createElement("option"); op.value = n; op.textContent = n; sel.appendChild(op); });
   }
 
+  // set a select's value, adding the option if it isn't in the list so existing data is never lost
+  function setSelect(sel, value) {
+    if (!value) { sel.value = ""; return; }
+    var found = Array.prototype.some.call(sel.options, function (o) { return o.value === value; });
+    if (!found) { var op = document.createElement("option"); op.value = value; op.textContent = value; sel.appendChild(op); }
+    sel.value = value;
+  }
+
   function searchId(entity, criteria) {
     return ZOHO.CRM.API.searchRecord({ Entity: entity, Type: "criteria", Query: criteria })
       .then(function (r) { return r && r.data && r.data[0] ? r.data[0].id : null; })
       .catch(function () { return null; });
   }
 
-  // ---------- build the empty form ----------
+  function loadStates(country) {
+    if (statesCache[country]) { return Promise.resolve(statesCache[country]); }
+    return getLocations(country).then(function (l) { statesCache[country] = l; return l; });
+  }
+
+  // ---------- build ----------
   function build() {
     var form = $("form");
     SECTIONS.forEach(function (sec) {
@@ -128,54 +149,103 @@
       var grid = document.createElement("div"); grid.className = "grid"; fs.appendChild(grid);
 
       sec.items.forEach(function (it) {
-        var wrap = document.createElement("div"); wrap.className = "field"; wrap.id = "f_" + it.api;
+        var wrap = document.createElement("div"); wrap.className = "field" + (it.req ? " mandatory" : ""); wrap.id = "f_" + it.api;
         var label = document.createElement("label"); label.setAttribute("for", "i_" + it.api); label.textContent = it.label;
         if (it.req) { var r = document.createElement("span"); r.className = "req"; r.textContent = "*"; label.appendChild(r); }
         wrap.appendChild(label);
 
-        var input;
-        if (it.type === "country" || it.type === "state") { input = document.createElement("select"); }
-        else { input = document.createElement("input"); input.type = it.type === "date" ? "date" : "text"; input.autocomplete = "off"; }
+        var t = it.type, input;
+        if (t === "country" || t === "state" || t === "nationality" || t === "select") {
+          input = document.createElement("select");
+          if (t === "select") { fillOptions(input, it.options, "Select"); }
+          else if (t === "state") { fillOptions(input, [], "Select a country first"); input.disabled = true; }
+          else { fillOptions(input, [], "Loading..."); }
+        } else {
+          input = document.createElement("input");
+          input.type = t === "date" ? "date" : "text";
+          if (t === "int") { input.inputMode = "numeric"; }
+          input.autocomplete = "off";
+        }
         input.id = "i_" + it.api;
         wrap.appendChild(input);
+
+        var err = document.createElement("div"); err.className = "err"; err.id = "e_" + it.api; err.textContent = it.label + " cannot be empty.";
+        wrap.appendChild(err);
+
+        var clear = function () { wrap.classList.remove("invalid"); };
+        input.addEventListener("input", clear); input.addEventListener("change", clear);
         grid.appendChild(wrap);
       });
       form.appendChild(fs);
     });
-    fillOptions($("i_State"), [], "Select a country first");
-    $("i_State").disabled = true;
   }
 
   $("form").addEventListener("change", function (e) {
     if (!e.target || e.target.id !== "i_Country_1") { return; }
-    var st = $("i_State"), c = e.target.value;
+    var st = $("i_State_1"), c = e.target.value;
     if (!c) { fillOptions(st, [], "Select a country first"); st.disabled = true; return; }
     st.disabled = true; fillOptions(st, [], "Loading...");
-    var p = statesCache[c] ? Promise.resolve(statesCache[c]) : getLocations(c).then(function (l) { statesCache[c] = l; return l; });
-    p.then(function (list) { fillOptions(st, list, "Select state"); st.disabled = false; })
-     .catch(function (err) { fillOptions(st, [], "Could not load states"); showBanner("Could not load states: " + (err && err.message ? err.message : JSON.stringify(err))); });
+    loadStates(c)
+      .then(function (list) { fillOptions(st, list, "Select state"); st.disabled = false; })
+      .catch(function (err) { fillOptions(st, [], "Could not load states"); showBanner("Could not load states: " + msg(err)); });
   });
 
+  // ---------- prefill from the lead ----------
+  function plain(v) {
+    if (v === null || v === undefined) { return ""; }
+    if (typeof v === "object") { return v.name !== undefined ? String(v.name || "") : ""; }
+    return String(v);
+  }
+
+  function prefill(rec) {
+    original = {};
+    allItems().forEach(function (it) {
+      var v = plain(rec[it.api]);
+      original[it.api] = v;
+      if (it.type === "state") { return; }      // handled after states load
+      var el = $("i_" + it.api);
+      if (el.tagName === "SELECT") { setSelect(el, v); } else { el.value = v; }
+    });
+
+    var country = original.Country_1, state = original.State_1;
+    if (!country) { return Promise.resolve(); }
+    var st = $("i_State_1");
+    return loadStates(country).then(function (list) {
+      fillOptions(st, list, "Select state"); st.disabled = false;
+      setSelect(st, state);
+    });
+  }
+
   // ---------- save ----------
+  function validate() {
+    var firstBad = null;
+    allItems().forEach(function (it) {
+      var el = $("i_" + it.api), v = (el.value || "").trim(), wrap = $("f_" + it.api), err = $("e_" + it.api);
+      var bad = false, text = it.label + " cannot be empty.";
+      if (it.req && !v) { bad = true; }
+      else if (it.type === "int" && v && !/^\d+$/.test(v)) { bad = true; text = it.label + " must be a number."; }
+      err.textContent = text;
+      wrap.classList.toggle("invalid", bad);
+      if (bad && !firstBad) { firstBad = el; }
+    });
+    if (firstBad) { firstBad.scrollIntoView({ block: "center", behavior: "smooth" }); firstBad.focus(); return false; }
+    return true;
+  }
+
   function save() {
-    var answers = {}, missing = [];
-    SECTIONS.forEach(function (s) { s.items.forEach(function (it) {
-      var v = ($("i_" + it.api).value || "").trim();
-      answers[it.api] = v;
-      var bad = it.req && !v;
-      $("f_" + it.api).classList.toggle("invalid", bad);
-      if (bad) { missing.push(it.label); }
-    }); });
-    if (missing.length) { showBanner("Required: " + missing.join(", ")); return; }
     clearBanner();
+    if (!validate()) { return; }
 
     showOverlay("Saving...");
-    var payload = { id: recordId, Lead_Status: targetStatus };
-    Object.keys(answers).forEach(function (k) {
-      if (k === "Country_1" || k === "State") { return; }
-      if (answers[k]) { payload[k] = answers[k]; }
+    var payload = { id: recordId, Lead_Status: targetStatus }, countryName = "", stateName = "";
+
+    allItems().forEach(function (it) {
+      var v = ($("i_" + it.api).value || "").trim();
+      if (it.api === "Country_1") { countryName = v; return; }
+      if (it.api === "State_1") { stateName = v; return; }
+      if (v) { payload[it.api] = it.type === "int" ? Number(v) : v; }
+      else if (original[it.api]) { payload[it.api] = null; }   // user cleared an existing value
     });
-    var countryName = answers.Country_1, stateName = answers.State;
 
     searchId("Country", "(Name:equals:" + countryName + ")")
       .then(function (cid) {
@@ -186,7 +256,7 @@
       })
       .then(function (sid) {
         if (stateName && !sid) { throw new Error("State '" + stateName + "' not found"); }
-        if (sid) { payload.State = { id: sid }; }
+        if (sid) { payload.State_1 = { id: sid }; }
         return ZOHO.CRM.API.updateRecord({ Entity: "Leads", APIData: payload });
       })
       .then(function (res) {
@@ -196,7 +266,7 @@
           setTimeout(function () { ZOHO.CRM.UI.Popup.closeReload(); }, 700);
         } else { throw new Error(row ? (row.message || row.code) : "Unexpected response"); }
       })
-      .catch(function (err) { hideOverlay(); showBanner("Save failed: " + (err && err.message ? err.message : JSON.stringify(err))); });
+      .catch(function (err) { hideOverlay(); showBanner("Save failed: " + msg(err)); });
   }
 
   $("btnSave").addEventListener("click", save);
@@ -209,9 +279,19 @@
     recordId = data.recordId || (Array.isArray(data.EntityId) ? data.EntityId[0] : data.EntityId);
     if (data.status) { targetStatus = data.status; }
     showOverlay("Loading...");
+
     getLocations("Country")
-      .then(function (countries) { fillOptions($("i_Country_1"), countries, "Select country"); hideOverlay(); })
-      .catch(function (e) { hideOverlay(); fillOptions($("i_Country_1"), [], "Could not load countries"); showBanner("Could not load countries: " + (e && e.message ? e.message : JSON.stringify(e))); });
+      .then(function (countries) {
+        fillOptions($("i_Country_1"), countries, "Select country");
+        fillOptions($("i_Nationality"), countries, "Select");
+        return ZOHO.CRM.API.getRecord({ Entity: "Leads", RecordID: recordId });
+      })
+      .then(function (resp) {
+        var rec = resp && resp.data && resp.data[0];
+        return rec ? prefill(rec) : null;
+      })
+      .then(hideOverlay)
+      .catch(function (e) { hideOverlay(); showBanner("Could not load lead details: " + msg(e)); });
   });
   ZOHO.embeddedApp.init();
 })();
