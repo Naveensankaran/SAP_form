@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo Widget</title>
+<script src="https://live.zwidgets.com/js-sdk/1.2/ZohoEmbededAppSDK.min.js"></script>
+<style>
+  :root { --ink:#1f2933; --muted:#64707d; --line:#d9dee3; --accent:#1b6ef3; --bg:#fff; --ok:#177a45; --err:#b3261e; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:20px 24px; font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; color:var(--ink); background:var(--bg); }
+  h1 { font-size:18px; margin:0 0 4px; }
+  p.sub { margin:0 0 18px; color:var(--muted); }
+  dl { display:grid; grid-template-columns:140px 1fr; gap:8px 12px; margin:0 0 20px; }
+  dt { color:var(--muted); }
+  dd { margin:0; font-weight:600; }
+  label { display:block; margin-bottom:6px; font-weight:600; }
+  select, textarea { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font:inherit; color:inherit; }
+  textarea { resize:vertical; min-height:70px; margin-top:14px; }
+  select:focus, textarea:focus, button:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+  .actions { display:flex; gap:10px; margin-top:18px; align-items:center; }
+  button { font:inherit; padding:8px 16px; border-radius:6px; border:1px solid var(--line); background:#fff; cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  button:disabled { opacity:.6; cursor:default; }
+  #msg { margin-left:auto; font-size:13px; }
+  #msg.ok { color:var(--ok); } #msg.err { color:var(--err); }
+</style>
+</head>
+<body>
+  <h1>Update lead status</h1>
+  <p class="sub" id="sub">Loading record…</p>
+
+  <dl>
+    <dt>Name</dt><dd id="name">–</dd>
+    <dt>Company</dt><dd id="company">–</dd>
+    <dt>Current status</dt><dd id="status">–</dd>
+  </dl>
+
+  <label for="newStatus">New status</label>
+  <select id="newStatus"></select>
+  <textarea id="note" placeholder="Add a note (optional)"></textarea>
+
+  <div class="actions">
+    <button class="primary" id="save" disabled>Save changes</button>
+    <button id="cancel">Cancel</button>
+    <span id="msg" role="status"></span>
+  </div>
+
+<script>
+  var MODULE = "Leads";
+  var recordId = null;
+  var STATUSES = ["Not Contacted","Attempted to Contact","Contacted","Contact in Future","Qualified","Lost Lead"];
+
+  function $(id){ return document.getElementById(id); }
+  function say(text, cls){ var m=$("msg"); m.textContent=text; m.className=cls||""; }
+
+  // 1. Data passed from ZDK.Client.openPopup() arrives here
+  ZOHO.embeddedApp.on("PageLoad", function (data) {
+    console.log("PageLoad data:", data);
+    recordId = data.recordId || (data.EntityId && [].concat(data.EntityId)[0]);
+    if (data.Entity) MODULE = data.Entity;
+    if (!recordId) { $("sub").textContent = "No record id received."; say("Check the Client Script params.", "err"); return; }
+    loadRecord();
+  });
+
+  // 2. Read the record with the JS SDK
+  function loadRecord() {
+    ZOHO.CRM.API.getRecord({ Entity: MODULE, RecordID: recordId }).then(function (res) {
+      var r = res.data[0];
+      $("sub").textContent = "Record " + recordId;
+      $("name").textContent = [r.First_Name, r.Last_Name].filter(Boolean).join(" ") || "–";
+      $("company").textContent = r.Company || "–";
+      $("status").textContent = r.Lead_Status || "–";
+      $("newStatus").innerHTML = STATUSES.map(function (s) {
+        return '<option' + (s === r.Lead_Status ? " selected" : "") + '>' + s + '</option>';
+      }).join("");
+      $("save").disabled = false;
+    }).catch(function (e) { say("Could not load record.", "err"); console.error(e); });
+  }
+
+  // 3. Update the record, add a note, then close and refresh the page behind
+  $("save").addEventListener("click", function () {
+    $("save").disabled = true; say("Saving…");
+    var body = { id: recordId, Lead_Status: $("newStatus").value };
+    ZOHO.CRM.API.updateRecord({ Entity: MODULE, APIData: body, Trigger: [] }).then(function (res) {
+      var ok = res.data && res.data[0] && res.data[0].code === "SUCCESS";
+      if (!ok) throw res;
+      var note = $("note").value.trim();
+      return note ? ZOHO.CRM.API.addNotes({ Entity: MODULE, RecordID: recordId, Title: "Status update", Content: note }) : null;
+    }).then(function () {
+      say("Saved", "ok");
+      setTimeout(function () { ZOHO.CRM.UI.Popup.closeReload(); }, 600);
+    }).catch(function (e) {
+      console.error(e); say("Save failed. See console.", "err"); $("save").disabled = false;
+    });
+  });
+
+  $("cancel").addEventListener("click", function () { ZOHO.CRM.UI.Popup.close(); });
+
+  ZOHO.embeddedApp.init();
+</script>
+</body>
+</html>
