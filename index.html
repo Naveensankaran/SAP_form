@@ -3,101 +3,218 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Demo Widget</title>
+<title>SAP Customer Details</title>
 <script src="https://live.zwidgets.com/js-sdk/1.2/ZohoEmbededAppSDK.min.js"></script>
 <style>
-  :root { --ink:#1f2933; --muted:#64707d; --line:#d9dee3; --accent:#1b6ef3; --bg:#fff; --ok:#177a45; --err:#b3261e; }
+  :root { --ink:#1f2933; --muted:#6b7785; --line:#d9dee4; --bg:#f5f7f9; --brand:#1a5f7a; --brand-dark:#134a5f; --danger:#c0392b; --ok:#1e8e5a; }
   * { box-sizing: border-box; }
-  body { margin:0; padding:20px 24px; font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; color:var(--ink); background:var(--bg); }
-  h1 { font-size:18px; margin:0 0 4px; }
-  p.sub { margin:0 0 18px; color:var(--muted); }
-  dl { display:grid; grid-template-columns:140px 1fr; gap:8px 12px; margin:0 0 20px; }
-  dt { color:var(--muted); }
-  dd { margin:0; font-weight:600; }
-  label { display:block; margin-bottom:6px; font-weight:600; }
-  select, textarea { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font:inherit; color:inherit; }
-  textarea { resize:vertical; min-height:70px; margin-top:14px; }
-  select:focus, textarea:focus, button:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
-  .actions { display:flex; gap:10px; margin-top:18px; align-items:center; }
-  button { font:inherit; padding:8px 16px; border-radius:6px; border:1px solid var(--line); background:#fff; cursor:pointer; }
-  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
-  button:disabled { opacity:.6; cursor:default; }
-  #msg { margin-left:auto; font-size:13px; }
-  #msg.ok { color:var(--ok); } #msg.err { color:var(--err); }
+  html, body { height: 100%; margin: 0; }
+  body { font-family: "Segoe UI", system-ui, Arial, sans-serif; font-size: 14px; color: var(--ink); background: #fff; }
+  .shell { display: flex; flex-direction: column; height: 100%; }
+  .body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+  fieldset { border: 0; padding: 0; margin: 0 0 22px; }
+  legend { padding: 0 0 8px; margin-bottom: 12px; width: 100%; font-weight: 600; color: var(--brand); border-bottom: 1px solid var(--line); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 18px; }
+  .field label { display: block; margin-bottom: 4px; font-size: 12px; color: var(--muted); }
+  .req { color: var(--danger); margin-left: 2px; }
+  input, select { width: 100%; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 4px; font: inherit; color: var(--ink); background: #fff; }
+  input:focus, select:focus { outline: 2px solid #9cc7d7; border-color: var(--brand); }
+  select:disabled { background: var(--bg); color: var(--muted); }
+  .field.invalid input, .field.invalid select { border-color: var(--danger); background: #fff8f7; }
+  .banner { display: none; margin-bottom: 14px; padding: 9px 12px; border-radius: 4px; background: #fdecea; color: var(--danger); border: 1px solid #f5c6c0; }
+  .banner.show { display: block; }
+  .footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--line); background: var(--bg); }
+  button { height: 34px; padding: 0 20px; border-radius: 4px; font: inherit; cursor: pointer; border: 1px solid var(--line); background: #fff; color: var(--ink); }
+  button:hover { background: #eef1f4; }
+  button.primary { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600; }
+  button.primary:hover { background: var(--brand-dark); }
+  .overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 10px; background: rgba(255,255,255,.88); font-weight: 600; }
+  .overlay.show { display: flex; }
+  .spinner { width: 28px; height: 28px; border: 3px solid var(--line); border-top-color: var(--brand); border-radius: 50%; animation: spin .8s linear infinite; }
+  .overlay.ok { color: var(--ok); } .overlay.ok .spinner { display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
-  <h1>Update lead status</h1>
-  <p class="sub" id="sub">Loading record…</p>
-
-  <dl>
-    <dt>Name</dt><dd id="name">–</dd>
-    <dt>Company</dt><dd id="company">–</dd>
-    <dt>Current status</dt><dd id="status">–</dd>
-  </dl>
-
-  <label for="newStatus">New status</label>
-  <select id="newStatus"></select>
-  <textarea id="note" placeholder="Add a note (optional)"></textarea>
-
-  <div class="actions">
-    <button class="primary" id="save" disabled>Save changes</button>
-    <button id="cancel">Cancel</button>
-    <span id="msg" role="status"></span>
+<div class="shell">
+  <div class="body">
+    <div class="banner" id="banner"></div>
+    <form id="form" novalidate></form>
   </div>
+  <div class="footer">
+    <button type="button" id="btnCancel">Cancel</button>
+    <button type="button" id="btnSave" class="primary">Save</button>
+  </div>
+</div>
+<div class="overlay" id="overlay"><div class="spinner"></div><div id="overlayText">Loading...</div></div>
 
 <script>
-  var MODULE = "Leads";
-  var recordId = null;
-  var STATUSES = ["Not Contacted","Attempted to Contact","Contacted","Contact in Future","Qualified","Lost Lead"];
+(function () {
+  "use strict";
+  var DEFAULT_STATUS = "Customer Code Creation SAP";
 
-  function $(id){ return document.getElementById(id); }
-  function say(text, cls){ var m=$("msg"); m.textContent=text; m.className=cls||""; }
+  var SECTIONS = [
+    { title: "Contact", items: [
+      { api: "First_Name", label: "First Name", req: true },
+      { api: "Last_Name", label: "Last Name", req: true },
+      { api: "Father_Name", label: "Father Name" },
+      { api: "Country_1", label: "Country", type: "country", req: true },
+      { api: "Phone", label: "Phone" },
+      { api: "Secondary_Phone", label: "Secondary Phone" },
+      { api: "Email", label: "Email" } ] },
+    { title: "Address", items: [
+      { api: "State", label: "State", type: "state", req: true },
+      { api: "City", label: "City" },
+      { api: "Zip_Code", label: "Zip Code" },
+      { api: "Flat_House_No_Building_Apartment_Name", label: "Flat / House No / Building" },
+      { api: "Street", label: "Street" },
+      { api: "Nationality", label: "Nationality" },
+      { api: "Secondary_Email", label: "Secondary Email" } ] },
+    { title: "Profile", items: [
+      { api: "Category_Type", label: "Category Type" },
+      { api: "Designation", label: "Designation" },
+      { api: "Occupation", label: "Occupation" },
+      { api: "Gender", label: "Gender" },
+      { api: "Family_Status_Code", label: "Family Status Code" },
+      { api: "Date_of_Birth", label: "Date of Birth", type: "date" },
+      { api: "Distribution_Channel", label: "Distribution Channel" } ] },
+    { title: "Identity", items: [
+      { api: "Aadhar", label: "Aadhar" },
+      { api: "PAN", label: "PAN" },
+      { api: "Passport_Number", label: "Passport Number" },
+      { api: "PIO_Number", label: "PIO Number" },
+      { api: "CIO_Number", label: "CIO Number" },
+      { api: "GST_Number", label: "GST Number" } ] }
+  ];
 
-  // 1. Data passed from ZDK.Client.openPopup() arrives here
-  ZOHO.embeddedApp.on("PageLoad", function (data) {
-    console.log("PageLoad data:", data);
-    recordId = data.recordId || (data.EntityId && [].concat(data.EntityId)[0]);
-    if (data.Entity) MODULE = data.Entity;
-    if (!recordId) { $("sub").textContent = "No record id received."; say("Check the Client Script params.", "err"); return; }
-    loadRecord();
-  });
+  var $ = function (id) { return document.getElementById(id); };
+  var recordId = null, targetStatus = DEFAULT_STATUS, statesCache = {};
 
-  // 2. Read the record with the JS SDK
-  function loadRecord() {
-    ZOHO.CRM.API.getRecord({ Entity: MODULE, RecordID: recordId }).then(function (res) {
-      var r = res.data[0];
-      $("sub").textContent = "Record " + recordId;
-      $("name").textContent = [r.First_Name, r.Last_Name].filter(Boolean).join(" ") || "–";
-      $("company").textContent = r.Company || "–";
-      $("status").textContent = r.Lead_Status || "–";
-      $("newStatus").innerHTML = STATUSES.map(function (s) {
-        return '<option' + (s === r.Lead_Status ? " selected" : "") + '>' + s + '</option>';
-      }).join("");
-      $("save").disabled = false;
-    }).catch(function (e) { say("Could not load record.", "err"); console.error(e); });
+  function showOverlay(t, ok) { $("overlayText").textContent = t; $("overlay").className = "overlay show" + (ok ? " ok" : ""); }
+  function hideOverlay() { $("overlay").className = "overlay"; }
+  function showBanner(m) { $("banner").textContent = m; $("banner").className = "banner show"; $("banner").scrollIntoView({ block: "nearest" }); }
+  function clearBanner() { $("banner").className = "banner"; }
+
+  function getLocations(countryName) {
+    return ZOHO.CRM.FUNCTIONS.execute("getlocations", { arguments: JSON.stringify({ countryName: countryName }) })
+      .then(function (resp) {
+        var out = null;
+        if (resp && resp.details && resp.details.output !== undefined) { out = resp.details.output; }
+        else if (resp && resp.output !== undefined) { out = resp.output; }
+        if (out === null || out === undefined || out.toString().trim() === "") { return []; }
+        return out.toString().split("|").map(function (s) { return s.trim(); }).filter(Boolean);
+      });
   }
 
-  // 3. Update the record, add a note, then close and refresh the page behind
-  $("save").addEventListener("click", function () {
-    $("save").disabled = true; say("Saving…");
-    var body = { id: recordId, Lead_Status: $("newStatus").value };
-    ZOHO.CRM.API.updateRecord({ Entity: MODULE, APIData: body, Trigger: [] }).then(function (res) {
-      var ok = res.data && res.data[0] && res.data[0].code === "SUCCESS";
-      if (!ok) throw res;
-      var note = $("note").value.trim();
-      return note ? ZOHO.CRM.API.addNotes({ Entity: MODULE, RecordID: recordId, Title: "Status update", Content: note }) : null;
-    }).then(function () {
-      say("Saved", "ok");
-      setTimeout(function () { ZOHO.CRM.UI.Popup.closeReload(); }, 600);
-    }).catch(function (e) {
-      console.error(e); say("Save failed. See console.", "err"); $("save").disabled = false;
+  function fillOptions(sel, list, placeholder) {
+    sel.innerHTML = "";
+    var o = document.createElement("option"); o.value = ""; o.textContent = placeholder; sel.appendChild(o);
+    list.forEach(function (n) { var op = document.createElement("option"); op.value = n; op.textContent = n; sel.appendChild(op); });
+  }
+
+  function searchId(entity, criteria) {
+    return ZOHO.CRM.API.searchRecord({ Entity: entity, Type: "criteria", Query: criteria })
+      .then(function (r) { return r && r.data && r.data[0] ? r.data[0].id : null; })
+      .catch(function () { return null; });
+  }
+
+  // ---------- build the empty form ----------
+  function build() {
+    var form = $("form");
+    SECTIONS.forEach(function (sec) {
+      var fs = document.createElement("fieldset");
+      var lg = document.createElement("legend"); lg.textContent = sec.title; fs.appendChild(lg);
+      var grid = document.createElement("div"); grid.className = "grid"; fs.appendChild(grid);
+
+      sec.items.forEach(function (it) {
+        var wrap = document.createElement("div"); wrap.className = "field"; wrap.id = "f_" + it.api;
+        var label = document.createElement("label"); label.setAttribute("for", "i_" + it.api); label.textContent = it.label;
+        if (it.req) { var r = document.createElement("span"); r.className = "req"; r.textContent = "*"; label.appendChild(r); }
+        wrap.appendChild(label);
+
+        var input;
+        if (it.type === "country" || it.type === "state") { input = document.createElement("select"); }
+        else { input = document.createElement("input"); input.type = it.type === "date" ? "date" : "text"; input.autocomplete = "off"; }
+        input.id = "i_" + it.api;
+        wrap.appendChild(input);
+        grid.appendChild(wrap);
+      });
+      form.appendChild(fs);
     });
+    fillOptions($("i_State"), [], "Select a country first");
+    $("i_State").disabled = true;
+  }
+
+  $("form").addEventListener("change", function (e) {
+    if (!e.target || e.target.id !== "i_Country_1") { return; }
+    var st = $("i_State"), c = e.target.value;
+    if (!c) { fillOptions(st, [], "Select a country first"); st.disabled = true; return; }
+    st.disabled = true; fillOptions(st, [], "Loading...");
+    var p = statesCache[c] ? Promise.resolve(statesCache[c]) : getLocations(c).then(function (l) { statesCache[c] = l; return l; });
+    p.then(function (list) { fillOptions(st, list, "Select state"); st.disabled = false; })
+     .catch(function (err) { fillOptions(st, [], "Could not load states"); showBanner("Could not load states: " + (err && err.message ? err.message : JSON.stringify(err))); });
   });
 
-  $("cancel").addEventListener("click", function () { ZOHO.CRM.UI.Popup.close(); });
+  // ---------- save ----------
+  function save() {
+    var answers = {}, missing = [];
+    SECTIONS.forEach(function (s) { s.items.forEach(function (it) {
+      var v = ($("i_" + it.api).value || "").trim();
+      answers[it.api] = v;
+      var bad = it.req && !v;
+      $("f_" + it.api).classList.toggle("invalid", bad);
+      if (bad) { missing.push(it.label); }
+    }); });
+    if (missing.length) { showBanner("Required: " + missing.join(", ")); return; }
+    clearBanner();
 
+    showOverlay("Saving...");
+    var payload = { id: recordId, Lead_Status: targetStatus };
+    Object.keys(answers).forEach(function (k) {
+      if (k === "Country_1" || k === "State") { return; }
+      if (answers[k]) { payload[k] = answers[k]; }
+    });
+    var countryName = answers.Country_1, stateName = answers.State;
+
+    searchId("Country", "(Name:equals:" + countryName + ")")
+      .then(function (cid) {
+        if (!cid) { throw new Error("Country '" + countryName + "' not found"); }
+        payload.Country_1 = { id: cid };
+        if (!stateName) { return null; }
+        return searchId("State", "((Name:equals:" + stateName + ")and(Country:equals:" + cid + "))");
+      })
+      .then(function (sid) {
+        if (stateName && !sid) { throw new Error("State '" + stateName + "' not found"); }
+        if (sid) { payload.State = { id: sid }; }
+        return ZOHO.CRM.API.updateRecord({ Entity: "Leads", APIData: payload });
+      })
+      .then(function (res) {
+        var row = res && res.data && res.data[0];
+        if (row && row.code === "SUCCESS") {
+          showOverlay("SAP details saved", true);
+          setTimeout(function () { ZOHO.CRM.UI.Popup.closeReload(); }, 700);
+        } else { throw new Error(row ? (row.message || row.code) : "Unexpected response"); }
+      })
+      .catch(function (err) { hideOverlay(); showBanner("Save failed: " + (err && err.message ? err.message : JSON.stringify(err))); });
+  }
+
+  $("btnSave").addEventListener("click", save);
+  $("btnCancel").addEventListener("click", function () { ZOHO.CRM.UI.Popup.close(); });
+
+  // ---------- init ----------
+  build();
+  ZOHO.embeddedApp.on("PageLoad", function (data) {
+    data = data || {};
+    recordId = data.recordId || (Array.isArray(data.EntityId) ? data.EntityId[0] : data.EntityId);
+    if (data.status) { targetStatus = data.status; }
+    showOverlay("Loading...");
+    getLocations("Country")
+      .then(function (countries) { fillOptions($("i_Country_1"), countries, "Select country"); hideOverlay(); })
+      .catch(function (e) { hideOverlay(); fillOptions($("i_Country_1"), [], "Could not load countries"); showBanner("Could not load countries: " + (e && e.message ? e.message : JSON.stringify(e))); });
+  });
   ZOHO.embeddedApp.init();
+})();
 </script>
 </body>
 </html>
