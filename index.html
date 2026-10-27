@@ -104,6 +104,17 @@
   function clearBanner() { $("banner").className = "banner"; }
   function msg(e) { return e && e.message ? e.message : JSON.stringify(e); }
 
+  // Close a widget that was opened with ZDK.Client.openPopup (client script).
+  // $Client.close(data) closes the popup and returns `data` to the client script.
+  function closePopup(result) {
+    try {
+      $Client.close(result || { saved: false });
+    } catch (e) {
+      console.warn("$Client.close failed, trying fallback", e);
+      try { ZOHO.CRM.UI.Popup.closeReload(); } catch (e2) { console.error(e2); }
+    }
+  }
+
   function getLocations(countryName) {
     return ZOHO.CRM.FUNCTIONS.execute("getlocations", { arguments: JSON.stringify({ countryName: countryName }) })
       .then(function (resp) {
@@ -263,14 +274,14 @@
         var row = res && res.data && res.data[0];
         if (row && row.code === "SUCCESS") {
           showOverlay("SAP details saved", true);
-          setTimeout(function () { ZOHO.CRM.UI.Popup.closeReload(); }, 700);
+          setTimeout(function () { closePopup({ saved: true }); }, 700);
         } else { throw new Error(row ? (row.message || row.code) : "Unexpected response"); }
       })
       .catch(function (err) { hideOverlay(); showBanner("Save failed: " + msg(err)); });
   }
 
   $("btnSave").addEventListener("click", save);
-  $("btnCancel").addEventListener("click", function () { ZOHO.CRM.UI.Popup.close(); });
+  $("btnCancel").addEventListener("click", function () { closePopup({ saved: false }); });
 
   // ---------- init ----------
   build();
