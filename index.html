@@ -128,6 +128,25 @@
       });
   }
 
+  // Closes the popup. Tries the SDK close calls; if the page is still alive afterwards the close
+  // did not work, so it tells the user instead of leaving a stuck "saved" overlay.
+  function closeForm(reload) {
+    var first = reload ? "closeReload" : "close", second = reload ? "close" : "closeReload";
+    function attempt(name) {
+      try {
+        var p = ZOHO.CRM.UI.Popup[name]();
+        if (p && p.catch) { p.catch(function (e) { console.error("Popup." + name + " failed", e); }); }
+      } catch (e) { console.error("Popup." + name + " threw", e); }
+    }
+    attempt(first);
+    setTimeout(function () { attempt(second); }, 500);
+    setTimeout(function () {
+      try { window.close(); } catch (e) {}
+      hideOverlay();
+      showBanner("Done, but the window could not close automatically. Please close it with the X.");
+    }, 1500);
+  }
+
   function fillOptions(sel, list, placeholder) {
     sel.innerHTML = "";
     var o = document.createElement("option"); o.value = ""; o.textContent = placeholder; sel.appendChild(o);
@@ -282,7 +301,7 @@
       })
       .then(function () {
         showOverlay("SAP details saved", true);
-        setTimeout(function () { ZOHO.CRM.UI.Popup.closeReload(); }, 700);
+        setTimeout(function () { closeForm(true); }, 700);
       })
       .catch(function (err) {
         hideOverlay();
@@ -292,7 +311,7 @@
   }
 
   $("btnSave").addEventListener("click", save);
-  $("btnCancel").addEventListener("click", function () { ZOHO.CRM.UI.Popup.close(); });
+  $("btnCancel").addEventListener("click", function () { closeForm(false); });
 
   // ---------- init ----------
   build();
