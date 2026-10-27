@@ -56,6 +56,7 @@
 <script>
 (function () {
   "use strict";
+  var Z = window.ZOHO;   // keep our own reference to the SDK
   var DEFAULT_STATUS = "Customer Code Creation SAP";
   var SAP_FUNCTION = "customerdatacreateinsap";   // Deluge function API name
 
@@ -106,7 +107,7 @@
   function msg(e) { return e && e.message ? e.message : JSON.stringify(e); }
 
   function getLocations(countryName) {
-    return ZOHO.CRM.FUNCTIONS.execute("getlocations", { arguments: JSON.stringify({ countryName: countryName }) })
+    return Z.CRM.FUNCTIONS.execute("getlocations", { arguments: JSON.stringify({ countryName: countryName }) })
       .then(function (resp) {
         var out = null;
         if (resp && resp.details && resp.details.output !== undefined) { out = resp.details.output; }
@@ -119,7 +120,7 @@
   // Calls the Deluge function customerdatacreateinsap(int Lead_Id).
   // Lead id is sent as a string: Zoho ids are ~19 digits and would lose precision as a JS Number.
   function createCustomerInSap(leadId) {
-    return ZOHO.CRM.FUNCTIONS.execute(SAP_FUNCTION, { arguments: JSON.stringify({ Lead_Id: String(leadId) }) })
+    return Z.CRM.FUNCTIONS.execute(SAP_FUNCTION, { arguments: JSON.stringify({ Lead_Id: String(leadId) }) })
       .then(function (resp) {
         if (resp && resp.code && String(resp.code).toLowerCase() !== "success") {
           throw new Error(resp.message || ("Function returned code " + resp.code));
@@ -134,7 +135,7 @@
     var first = reload ? "closeReload" : "close", second = reload ? "close" : "closeReload";
     function attempt(name) {
       try {
-        var p = ZOHO.CRM.UI.Popup[name]();
+        var p = Z.CRM.UI.Popup[name]();
         if (p && p.catch) { p.catch(function (e) { console.error("Popup." + name + " failed", e); }); }
       } catch (e) { console.error("Popup." + name + " threw", e); }
     }
@@ -162,7 +163,7 @@
   }
 
   function searchId(entity, criteria) {
-    return ZOHO.CRM.API.searchRecord({ Entity: entity, Type: "criteria", Query: criteria })
+    return Z.CRM.API.searchRecord({ Entity: entity, Type: "criteria", Query: criteria })
       .then(function (r) { return r && r.data && r.data[0] ? r.data[0].id : null; })
       .catch(function () { return null; });
   }
@@ -290,7 +291,7 @@
       .then(function (sid) {
         if (stateName && !sid) { throw new Error("State '" + stateName + "' not found"); }
         if (sid) { payload.State_1 = { id: sid }; }
-        return ZOHO.CRM.API.updateRecord({ Entity: "Leads", APIData: payload });
+        return Z.CRM.API.updateRecord({ Entity: "Leads", APIData: payload });
       })
       .then(function (res) {
         var row = res && res.data && res.data[0];
@@ -315,7 +316,8 @@
 
   // ---------- init ----------
   build();
-  ZOHO.embeddedApp.on("PageLoad", function (data) {
+  if (!Z) { showBanner("Zoho SDK did not load, so this form cannot talk to CRM. Check that the SDK script URL is reachable."); return; }
+  Z.embeddedApp.on("PageLoad", function (data) {
     data = data || {};
     recordId = data.recordId || (Array.isArray(data.EntityId) ? data.EntityId[0] : data.EntityId);
     if (data.status) { targetStatus = data.status; }
@@ -325,7 +327,7 @@
       .then(function (countries) {
         fillOptions($("i_Country_1"), countries, "Select country");
         fillOptions($("i_Nationality"), countries, "Select");
-        return ZOHO.CRM.API.getRecord({ Entity: "Leads", RecordID: recordId });
+        return Z.CRM.API.getRecord({ Entity: "Leads", RecordID: recordId });
       })
       .then(function (resp) {
         var rec = resp && resp.data && resp.data[0];
@@ -334,7 +336,7 @@
       .then(hideOverlay)
       .catch(function (e) { hideOverlay(); showBanner("Could not load lead details: " + msg(e)); });
   });
-  ZOHO.embeddedApp.init();
+  Z.embeddedApp.init();
 })();
 </script>
 </body>
