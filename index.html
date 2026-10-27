@@ -56,9 +56,7 @@
 <script>
 (function () {
   "use strict";
-  var Z = window.ZOHO;   // keep our own reference to the SDK
   var DEFAULT_STATUS = "Customer Code Creation SAP";
-  var SAP_FUNCTION = "customerdatacreateinsap";   // Deluge function API name
 
   // req:true => mandatory (red marker + "<label> cannot be empty." warning).
   // Change req flags here to adjust which fields are mandatory.
@@ -67,18 +65,18 @@
       { api: "First_Name", label: "First Name", req: true },
       { api: "Last_Name", label: "Last Name", req: true },
       { api: "Father_Name", label: "Father Name" },
+      { api: "Country_1", label: "Country", type: "country", req: true },
       { api: "Phone", label: "Phone", req: true },
       { api: "Secondary_Phone", label: "Secondary Phone" },
-      { api: "Email", label: "Email", req: true },
-      { api: "Secondary_Email", label: "Secondary Email" } ] },
+      { api: "Email", label: "Email", req: true } ] },
     { title: "Address", items: [
-      { api: "Country_1", label: "Country", type: "country", req: true },
       { api: "State_1", label: "State", type: "state", req: true },
       { api: "City_1", label: "City" },
       { api: "Zip_Code_1", label: "Zip Code", req: true },
       { api: "address_line_1", label: "Flat / House No / Building / Apartment Name", req: true },
       { api: "address_line_2", label: "Street", req: true },
-      { api: "Nationality", label: "Nationality", type: "nationality" } ] },
+      { api: "Nationality", label: "Nationality", type: "nationality" },
+      { api: "Secondary_Email", label: "Secondary Email" } ] },
     { title: "Profile", items: [
       { api: "Category_Type", label: "Category Type", type: "select", options: ["Person", "Organization", "Group"] },
       { api: "Title_And_Company", label: "Designation / Company" },
@@ -107,7 +105,7 @@
   function msg(e) { return e && e.message ? e.message : JSON.stringify(e); }
 
   function getLocations(countryName) {
-    return Z.CRM.FUNCTIONS.execute("getlocations", { arguments: JSON.stringify({ countryName: countryName }) })
+    return ZOHO.CRM.FUNCTIONS.execute("getlocations", { arguments: JSON.stringify({ countryName: countryName }) })
       .then(function (resp) {
         var out = null;
         if (resp && resp.details && resp.details.output !== undefined) { out = resp.details.output; }
@@ -115,37 +113,6 @@
         if (out === null || out === undefined || out.toString().trim() === "") { return []; }
         return out.toString().split("|").map(function (s) { return s.trim(); }).filter(Boolean);
       });
-  }
-
-  // Calls the Deluge function customerdatacreateinsap(int Lead_Id).
-  // Lead id is sent as a string: Zoho ids are ~19 digits and would lose precision as a JS Number.
-  function createCustomerInSap(leadId) {
-    return Z.CRM.FUNCTIONS.execute(SAP_FUNCTION, { arguments: JSON.stringify({ Lead_Id: String(leadId) }) })
-      .then(function (resp) {
-        if (resp && resp.code && String(resp.code).toLowerCase() !== "success") {
-          throw new Error(resp.message || ("Function returned code " + resp.code));
-        }
-        return resp;
-      });
-  }
-
-  // Closes the popup. Tries the SDK close calls; if the page is still alive afterwards the close
-  // did not work, so it tells the user instead of leaving a stuck "saved" overlay.
-  function closeForm(reload) {
-    var first = reload ? "closeReload" : "close", second = reload ? "close" : "closeReload";
-    function attempt(name) {
-      try {
-        var p = Z.CRM.UI.Popup[name]();
-        if (p && p.catch) { p.catch(function (e) { console.error("Popup." + name + " failed", e); }); }
-      } catch (e) { console.error("Popup." + name + " threw", e); }
-    }
-    attempt(first);
-    setTimeout(function () { attempt(second); }, 500);
-    setTimeout(function () {
-      try { window.close(); } catch (e) {}
-      hideOverlay();
-      showBanner("Done, but the window could not close automatically. Please close it with the X.");
-    }, 1500);
   }
 
   function fillOptions(sel, list, placeholder) {
@@ -163,7 +130,7 @@
   }
 
   function searchId(entity, criteria) {
-    return Z.CRM.API.searchRecord({ Entity: entity, Type: "criteria", Query: criteria })
+    return ZOHO.CRM.API.searchRecord({ Entity: entity, Type: "criteria", Query: criteria })
       .then(function (r) { return r && r.data && r.data[0] ? r.data[0].id : null; })
       .catch(function () { return null; });
   }
@@ -271,7 +238,6 @@
 
     showOverlay("Saving...");
     var payload = { id: recordId, Lead_Status: targetStatus }, countryName = "", stateName = "";
-    var recordSaved = false;
 
     allItems().forEach(function (it) {
       var v = ($("i_" + it.api).value || "").trim();
@@ -291,33 +257,24 @@
       .then(function (sid) {
         if (stateName && !sid) { throw new Error("State '" + stateName + "' not found"); }
         if (sid) { payload.State_1 = { id: sid }; }
-        return Z.CRM.API.updateRecord({ Entity: "Leads", APIData: payload });
+        return ZOHO.CRM.API.updateRecord({ Entity: "Leads", APIData: payload });
       })
       .then(function (res) {
         var row = res && res.data && res.data[0];
-        if (!(row && row.code === "SUCCESS")) { throw new Error(row ? (row.message || row.code) : "Unexpected response"); }
-        recordSaved = true;
-        showOverlay("Creating customer in SAP...");
-        return createCustomerInSap(recordId);
+        if (row && row.code === "SUCCESS") {
+          showOverlay("SAP details saved", true);
+          setTimeout(function () { ZOHO.CRM.UI.Popup.closeReload(); }, 700);
+        } else { throw new Error(row ? (row.message || row.code) : "Unexpected response"); }
       })
-      .then(function () {
-        showOverlay("SAP details saved", true);
-        setTimeout(function () { closeForm(true); }, 700);
-      })
-      .catch(function (err) {
-        hideOverlay();
-        if (recordSaved) { showBanner("Details were saved, but SAP customer creation failed: " + msg(err)); }
-        else { showBanner("Save failed: " + msg(err)); }
-      });
+      .catch(function (err) { hideOverlay(); showBanner("Save failed: " + msg(err)); });
   }
 
   $("btnSave").addEventListener("click", save);
-  $("btnCancel").addEventListener("click", function () { closeForm(false); });
+  $("btnCancel").addEventListener("click", function () { ZOHO.CRM.UI.Popup.close(); });
 
   // ---------- init ----------
   build();
-  if (!Z) { showBanner("Zoho SDK did not load, so this form cannot talk to CRM. Check that the SDK script URL is reachable."); return; }
-  Z.embeddedApp.on("PageLoad", function (data) {
+  ZOHO.embeddedApp.on("PageLoad", function (data) {
     data = data || {};
     recordId = data.recordId || (Array.isArray(data.EntityId) ? data.EntityId[0] : data.EntityId);
     if (data.status) { targetStatus = data.status; }
@@ -327,7 +284,7 @@
       .then(function (countries) {
         fillOptions($("i_Country_1"), countries, "Select country");
         fillOptions($("i_Nationality"), countries, "Select");
-        return Z.CRM.API.getRecord({ Entity: "Leads", RecordID: recordId });
+        return ZOHO.CRM.API.getRecord({ Entity: "Leads", RecordID: recordId });
       })
       .then(function (resp) {
         var rec = resp && resp.data && resp.data[0];
@@ -336,7 +293,7 @@
       .then(hideOverlay)
       .catch(function (e) { hideOverlay(); showBanner("Could not load lead details: " + msg(e)); });
   });
-  Z.embeddedApp.init();
+  ZOHO.embeddedApp.init();
 })();
 </script>
 </body>
